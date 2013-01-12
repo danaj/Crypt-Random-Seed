@@ -145,7 +145,7 @@ sub _try_dev_random {
 sub __read_file {
   my ($file, $nbytes) = @_;
   return unless defined $nbytes && $nbytes > 0;
-  sysopen my $fh, $file, O_RDONLY;
+  sysopen(my $fh, $file, O_RDONLY);
   my($s, $buffer, $nread) = ('', '', 0);
   while ($nread < $nbytes) {
     my $thisread = sysread $fh, $buffer, $nbytes-$nread;
