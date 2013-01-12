@@ -30,6 +30,10 @@ WriteMakefile1(
                      },
 
     META_MERGE    => {
+                      resources  => {
+                       homepage   => 'https://github.com/danaj/Crypt-Random-Seed',
+                       repository => 'https://github.com/danaj/Crypt-Random-Seed',
+                       },
                      },
     MIN_PERL_VERSION => 5.006002,
 );
