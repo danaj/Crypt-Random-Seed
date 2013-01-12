@@ -1,0 +1,21 @@
+Changes
+Makefile.PL
+LICENSE
+MANIFEST
+README
+TODO
+lib/Crypt/Random/Seed.pm
+t/01-load.t
+t/02-new.t
+t/03-can.t
+t/10-method.t
+t/11-getrandombytes.t
+t/12-whitelist.t
+t/13-blacklist.t
+t/90-release-perlcritic.t
+t/91-release-pod-syntax.t
+t/92-release-pod-coverage.t
+t/93-release-kwalitee.t
+.travis.yml
+META.yml                                 Module YAML meta-data (added by MakeMaker)
+META.json                                Module JSON meta-data (added by MakeMaker)

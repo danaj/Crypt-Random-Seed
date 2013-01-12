@@ -1,0 +1,28 @@
+---
+abstract: 'Provide strong randomness for seeding'
+author:
+  - 'Dana A Jacobsen <dana@acm.org>'
+build_requires:
+  Test::More: 0.45
+configure_requires:
+  ExtUtils::MakeMaker: 0
+dynamic_config: 1
+generated_by: 'ExtUtils::MakeMaker version 6.6302, CPAN::Meta::Converter version 2.120921'
+license: perl
+meta-spec:
+  url: http://module-build.sourceforge.net/META-spec-v1.4.html
+  version: 1.4
+name: Crypt-Random-Seed
+no_index:
+  directory:
+    - t
+    - inc
+requires:
+  Carp: 0
+  Crypt::Random::TESHA2: 0
+  Exporter: 5.562
+  Fcntl: 0
+  FileHandle: 0
+  base: 0
+  perl: 5.006002
+version: 0.01

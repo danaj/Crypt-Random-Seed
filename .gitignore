@@ -1,0 +1,6 @@
+Crypt-Random-Seed-*.tar.gz
+Makefile
+Makefile.old
+MYMETA.*
+blib*
+pm_to_blib
