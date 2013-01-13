@@ -8,6 +8,7 @@ lib/Crypt/Random/Seed.pm
 t/01-load.t
 t/02-new.t
 t/03-can.t
+t/04-win32.t
 t/10-method.t
 t/11-getrandombytes.t
 t/12-whitelist.t

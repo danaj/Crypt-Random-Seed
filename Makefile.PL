@@ -6,7 +6,9 @@ if ($^O eq 'MSWin32') {
   # Make sure we use a newish version of Win32::API for 64-bit
   my $api_version = (~0 > 281474976710656) ? 0.62 : 0;
   %os_prereq = (
-                       'Win32::API' => $api_version,
+                       'Win32'            => 0,
+                       'Win32::API'       => $api_version,
+                       #'Win32::API::Type' => 0,  # a submodule of Win32::API
                );
 }
 
