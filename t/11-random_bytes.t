@@ -10,11 +10,11 @@ use Crypt::Random::Seed;
 
 use Test::More  tests => 2;
 
-my $source = new Crypt::Random::Seed;
+my $source = new Crypt::Random::Seed(Weak=>1, NonBlocking=>1);
 
-my $byte = $source->random_bytes(1);
-is( length($byte), 1, "random_bytes(1) returned 1 byte" );
+my $byte = $source->random_bytes(4);
+is( length($byte), 4, "random_bytes(4) returned 4 bytes" );
 
 # All in one.
-my $seed = Crypt::Random::Seed->new->random_bytes(4);
-is( length($seed), 4, "CRS->new->random_bytes(4) returned 4 bytes" );
+my $seed = Crypt::Random::Seed->new->random_bytes(1);
+is( length($seed), 1, "CRS->new->random_bytes(1) returned 1 byte" );
