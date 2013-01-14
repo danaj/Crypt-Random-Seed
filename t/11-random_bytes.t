@@ -12,9 +12,9 @@ use Test::More  tests => 2;
 
 my $source = new Crypt::Random::Seed;
 
-my $byte = $source->get_random_bytes(1);
-is( length($byte), 1, "get_random_bytes(1) returned 1 byte" );
+my $byte = $source->random_bytes(1);
+is( length($byte), 1, "random_bytes(1) returned 1 byte" );
 
 # All in one.
-my $seed = Crypt::Random::Seed->new->get_random_bytes(4);
-is( length($seed), 4, "CRS->new->get_random_bytes(4) returned 4 bytes" );
+my $seed = Crypt::Random::Seed->new->random_bytes(4);
+is( length($seed), 4, "CRS->new->random_bytes(4) returned 4 bytes" );

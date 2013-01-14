@@ -113,12 +113,19 @@ sub is_strong {
   my $self = shift;
   return $self->{Strong};
 }
-sub get_random_bytes {
+sub random_bytes {
   my ($self, $nbytes) = @_;
-  return '' unless defined $nbytes && $nbytes > 0;
+  return '' unless defined $nbytes && int($nbytes) > 0;
   my $rsub = $self->{SourceSub};
   return unless defined $rsub;
-  return $rsub->($nbytes);
+  return $rsub->(int($nbytes));
+}
+sub random_values {
+  my ($self, $nvalues) = @_;
+  return unless defined $nvalues && int($nvalues) > 0;
+  my $rsub = $self->{SourceSub};
+  return unless defined $rsub;
+  return unpack( 'L*', $rsub->(4 * int($nvalues)) );
 }
 
 
@@ -253,7 +260,8 @@ Version 0.01
 
   my $source = new Crypt::Random::Seed;
   die "No strong sources exist" unless defined $source;
-  my $seed = $source->get_random_bytes(4);
+  my $seed_string = $source->random_bytes(4);
+  my @seed_values = $source->random_values(4);
 
   # Allow weak sources, in case nothing strong is available
   my $maybe_weak_source = Crypt::Random::Seed( Weak=>1 );
@@ -276,7 +284,9 @@ Version 0.01
   say "My randomness source is ", $source->name();
   say "I am a blocking source" if $source->is_blocking();
   say "I am a strong randomness source" if $source->is_strong()
-  say "Four 8-bit numbers:", join(",", $source->get_random_bytes(4));
+  say "Four 8-bit numbers:",
+      join(",", map { ord $source->random_bytes(1) } 1..4);'
+  say "Four 32-bit numbers:", join(",", $source->random_values(4));
 
 
 =head1 DESCRIPTION
@@ -365,7 +375,7 @@ source whose name matches one of these strings will be chosen.  The string
 =head2 Source => sub { I<...> }
 
 Uses the given anonymous subroutine as the generator.  The subroutine will
-be given an integer (the argument to C<get_random_bytes>) and should return
+be given an integer (the argument to C<random_bytes>) and should return
 random data in a string of the given length.  For the purposes of the other
 object methods, the returned object will have the name 'User', and be
 considered non-blocking and non-strong.
@@ -379,10 +389,16 @@ listed in the L</"name"> section.
 
 =head1 METHODS
 
-=head2 get_random_bytes($n)
+=head2 random_bytes($n)
 
 Takes an integer and returns a string of that size filled with random data.
 Returns an empty string if the argument is not defined or is not more than
+zero.
+
+=head2 random_values($n)
+
+Takes an integer and returns an array of that many random 32-bit values.
+Returns an empty array if the argument is not defined or is not more than
 zero.
 
 =head2 name
@@ -412,8 +428,13 @@ that even if a source doesn't block, it may be extremely slow.
 
 Dana Jacobsen E<lt>dana@acm.orgE<gt>
 
+
+=head1 ACKNOWLEDGEMENTS
+
 To the best of my knowledge, Max Kanat-Alexander was the original author of
-the Perl code that uses the Win32 API.
+the Perl code that uses the Win32 API.  I used his code as a reference.
+
+David Oswald gave me a lot of help with API discussions and code reviews.
 
 
 =head1 SEE ALSO

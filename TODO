@@ -1,4 +1,1 @@
 - Add EGD
-
-- In theory we could do a test for Win32, /dev/random, and /dev/urandom in
-  Makefile.PL and then remove TESHA2 from the modules list.
