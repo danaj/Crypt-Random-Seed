@@ -301,24 +301,24 @@ The randomness sources used are, in order:
 
 =over 4
 
-=item Win32 Crypto API.  This will use C<CryptGenRandom> on Windows 2000
+=item 1. Win32 Crypto API.  This will use C<CryptGenRandom> on Windows 2000
       and C<RtlGenRand> on Windows XP and newer.  According to MSDN, these
       are well-seeded CSPRNGs (FIPS 186-2 or AES-CTR), so should
       be non-blocking.
 
-=item /dev/random.  The strong source of randomness on most UNIX-like systems.
-      Cygwin uses this, though it maps to the Win32 API.  On almost all
-      systems this is a blocking source of randomness -- if it runs out of
+=item 2. /dev/random.  The strong source of randomness on most UNIX-like
+      systems.  Cygwin uses this, though it maps to the Win32 API.  On almost
+      all systems this is a blocking source of randomness -- if it runs out of
       estimated entropy, it will hang until more has come into the system.
       If this is an issue, which it often is on embedded devices, running a
       tool such as L<HAVEGED|http://www.issihosts.com/haveged/> or
       L<EGD|http://egd.sourceforge.net/> will help immensely.
 
-=item /dev/urandom.  A nonblocking source of randomness that we label as
+=item 3. /dev/urandom.  A nonblocking source of randomness that we label as
       weak, since it will continue providing output even if the entropy has
       been exhausted.
 
-=item L<Crypt::Random::TESHA2>, a module that generates random bytes from
+=item 4. L<Crypt::Random::TESHA2>, a module that generates random bytes from
       an entropy pool fed with timer/scheduler variations.  Measurements and
       tests are performed on installation to determine whether the source is
       considered strong or weak.  This is entirely in portable userspace,
@@ -338,7 +338,9 @@ considered weak while Win32 is strong?  Can any userspace method such as
 TrueRand or TESHA2 be considered strong?
 
 
-=head1 CONSTRUCTOR
+=head1 METHODS
+
+=head2 new
 
 The constructor with no arguments will find the first strong source in its
 fixed list and return an object that performs the defined methods.  This
@@ -348,31 +350,31 @@ returned value will be undef.
 
 Optional parameters are passed in as a hash and may be mixed.
 
-=head2 Weak => I<boolean>
+=head3 Weak => I<boolean>
 
 Weak sources are also allowed.  This means /dev/urandom will be checked right
 after /dev/random, and TESHA2 will be allowed even if it was considered weak
 on this system.  If this option is specified, a source should always be
 available.  Note that strong sources are still preferred.
 
-=head2 NonBlocking => I<boolean>
+=head3 NonBlocking => I<boolean>
 
 Only non-blocking sources will be allowed.  In practice this means /dev/random
 will not be chosen (except on FreeBSD where it is non-blocking).
 
-=head2 Only => [I<list of strings>]
+=head3 Only => [I<list of strings>]
 
 Takes an array reference containing one or more string source names.  No
 source whose name does not match one of these strings will be chosen.  The
 string 'Win32' will match either of the Win32 sources.
 
-=head2 Never => [I<list of strings>]
+=head3 Never => [I<list of strings>]
 
 Takes an array reference containing one or more string source names.  No
 source whose name matches one of these strings will be chosen.  The string
 'Win32' will match either of the Win32 sources.
 
-=head2 Source => sub { I<...> }
+=head3 Source => sub { I<...> }
 
 Uses the given anonymous subroutine as the generator.  The subroutine will
 be given an integer (the argument to C<random_bytes>) and should return
@@ -380,14 +382,13 @@ random data in a string of the given length.  For the purposes of the other
 object methods, the returned object will have the name 'User', and be
 considered non-blocking and non-strong.
 
-=head2 Source => ['I<name>', sub { I<...> }, I<is_blocking>, I<is_strong>]
+=head3 Source => ['I<name>', sub { I<...> }, I<is_blocking>, I<is_strong>]
 
 Similar to the simpler source routine, but also allows the other source
 parameters to be defined.  The name may not be one of the standard names
 listed in the L</"name"> section.
 
 
-=head1 METHODS
 
 =head2 random_bytes($n)
 
@@ -444,7 +445,7 @@ None of the modules on CPAN quite fit my needs, hence this.  Some alternatives:
 
 =head2 L<Math::Random::Source>
 
-A comprehensive system using multiple plugins.  It's has a nice API, but
+A comprehensive system using multiple plugins.  It has a nice API, but
 uses L<Any::Moose> which means you're loading up Moose or Mouse just to
 read a few bytes from /dev/random.  It also has a very long dependency chain,
 with on the order of 40 modules being installed as prerequisites (depending
@@ -475,10 +476,11 @@ octets and letting upstream modules handle the rest.
 
 =head2 Upstream modules
 
-Some modules that could build on top of this include
+Some modules that could use this module to help them:
 L<Bytes::Random::Secure>,
 L<Math::Random::ISAAC>,
-and L<Math::Random::Secure>,
+L<Math::Random::Secure>,
+and L<Math::Random::MT>
 to name a few.
 
 
