@@ -443,7 +443,7 @@ David Oswald gave me a lot of help with API discussions and code reviews.
 The first question one may ask is "Why yet another module of this type?"
 None of the modules on CPAN quite fit my needs, hence this.  Some alternatives:
 
-=head2 L<Math::Random::Source>
+=head2 L<Crypt::Random::Source>
 
 A comprehensive system using multiple plugins.  It has a nice API, but
 uses L<Any::Moose> which means you're loading up Moose or Mouse just to
@@ -473,6 +473,15 @@ Requires L<Math::Pari> which makes it unacceptable in some environments.
 Has more features (numbers in arbitrary bigint intervals or bit sizes).
 L<Crypt::Random::Seed> is taking a simpler approach, just handling returning
 octets and letting upstream modules handle the rest.
+
+=head2 L<Data::Entropy>
+
+An interesting module that contains a source encapsulation (defaults to system
+rand, but has many plugins), a good CSPRNG (AES in counter mode), and the
+L<Data::Entropy::Algorithms> module with many ways to get bits, ints, bigints,
+floats, bigfloats, shuffles, and so forth.  From my perspective, the
+algorithms module is the highlight, with a lot of interesting code.
+
 
 =head2 Upstream modules
 
