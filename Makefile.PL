@@ -1,3 +1,6 @@
+use 5.006000;
+use strict;
+use warnings;
 use ExtUtils::MakeMaker;
 
 my %os_prereq;
@@ -25,6 +28,7 @@ WriteMakefile1(
     PREREQ_PM     => {
                        'Exporter'        => '5.562',
                        'base'            => 0,
+                       'constant'        => 0,
                        'Carp'            => 0,
                        'Fcntl'           => 0,
                        %os_prereq,

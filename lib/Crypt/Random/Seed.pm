@@ -14,6 +14,8 @@ our @EXPORT_OK = qw( );
 our %EXPORT_TAGS = (all => [ @EXPORT_OK ]);
 our @EXPORT = qw( );  # nothing by default
 
+use constant UINT32_SIZE => 4;
+
 # This is just used to keep track of the pre-defined names, so nobody can
 # define a user method with this name.
 my %defined_methods = (
@@ -22,6 +24,7 @@ my %defined_methods = (
   '/dev/random'    => 1,
   '/dev/urandom'   => 1,
   'TESHA2'         => 1,
+  'EGD'            => 1,
 );
 
 sub new {
@@ -47,6 +50,7 @@ sub new {
   } else {
     my @methodlist = (
        \&_try_win32,
+       \&_try_egd,
        \&_try_dev_random,
        \&_try_dev_urandom,
        \&_try_tesha2,
@@ -125,7 +129,7 @@ sub random_values {
   return unless defined $nvalues && int($nvalues) > 0;
   my $rsub = $self->{SourceSub};
   return unless defined $rsub;
-  return unpack( 'L*', $rsub->(4 * int($nvalues)) );
+  return unpack( 'L*', $rsub->(UINT32_SIZE * int($nvalues)) );
 }
 
 
@@ -182,16 +186,16 @@ sub _try_win32 {
   eval { require Win32; require Win32::API; require Win32::API::Type; 1; }
   or return;
 
-  my $CRYPT_SILENT      = 0x40;          # Never display a UI.
-  my $PROV_RSA_FULL     = 1;             # Which service provider.
-  my $VERIFY_CONTEXT    = 0xF0000000;    # Don't require existing keypairs.
-  my $W2K_MAJOR_VERSION = 5;             # Windows 2000
-  my $W2K_MINOR_VERSION = 0;
+  use constant CRYPT_SILENT      => 0x40;       # Never display a UI.
+  use constant PROV_RSA_FULL     => 1;          # Which service provider.
+  use constant VERIFY_CONTEXT    => 0xF0000000; # Don't need existing keypairs.
+  use constant W2K_MAJOR_VERSION => 5;          # Windows 2000
+  use constant W2K_MINOR_VERSION => 0;
 
   my ($major, $minor) = (Win32::GetOSVersion())[1, 2];
-  return if $major < $W2K_MAJOR_VERSION;
+  return if $major < W2K_MAJOR_VERSION;
 
-  if ($major == $W2K_MAJOR_VERSION && $minor == $W2K_MINOR_VERSION) {
+  if ($major == W2K_MAJOR_VERSION && $minor == W2K_MINOR_VERSION) {
     # We are Windows 2000.  Use the older CryptGenRandom interface.
     my $crypt_acquire_context_a =
               Win32::API->new( 'advapi32', 'CryptAcquireContextA', 'PPPNN',
@@ -199,7 +203,7 @@ sub _try_win32 {
     return unless defined $crypt_acquire_context_a;
     my $context = chr(0) x Win32::API::Type->sizeof('PULONG');
     my $result = $crypt_acquire_context_a->Call(
-             $context, 0, 0, $PROV_RSA_FULL, $CRYPT_SILENT | $VERIFY_CONTEXT );
+             $context, 0, 0, PROV_RSA_FULL, CRYPT_SILENT | VERIFY_CONTEXT );
     return unless $result;
     my $pack_type = Win32::API::Type::packing('PULONG');
     $context = unpack $pack_type, $context;
@@ -234,6 +238,63 @@ _RTLGENRANDOM_PROTO_
             0, 1);  # Assume non-blocking and strong
   }
   return;
+}
+
+sub _try_egd {
+  # For locations, we'll look in the files OpenSSL's RAND_egd looks, as well
+  # as /etc/entropy which egd 0.9 recommends.  This also works with PRNGD.
+  # PRNGD uses a seed+CSPRNG so is non-blocking, but we can't tell them apart.
+  foreach my $device (qw( /var/run/egd-pool /dev/egd-pool /etc/egd-pool /etc/entropy )) {
+    next unless -r $device && -S $device;
+    eval { require IO::Socket; 1; } or return;
+    # We're looking for a socket that returns the entropy available when given
+    # that command.  Set timeout to 1 to prevent hanging -- if it is a socket
+    # but won't return the available entropy in under a second, move on.
+    my $socket = IO::Socket::UNIX->new(Peer => $device, Timeout => 1);
+    next unless $socket;
+    $socket->syswrite( pack("C", 0x00), 1) or next;
+    die if $socket->error;
+    my($entropy_string, $nread);
+    # Sadly this doesn't honor the timeout.  We'll have to do an eval / alarm.
+    # We only timeout here if this is a live socket to a sleeping process.
+    eval {
+      local $SIG{ALRM} = sub { die "alarm\n" };
+      alarm 1;
+      $nread = $socket->sysread($entropy_string, 4);
+      alarm 0;
+    };
+    if ($@) {
+      die unless $@ eq "alarm\n";
+      next;
+    }
+    next unless defined $nread && $nread == 4;
+    my $entropy_avail = unpack("N", $entropy_string);
+    return ('EGD', sub { __read_egd($device, @_); }, 1, 1);
+  }
+  return;
+}
+
+sub __read_egd {
+  my ($device, $nbytes) = @_;
+  return unless defined $device;
+  return unless defined $nbytes && int($nbytes) > 0;
+  croak "$device doesn't exist!" unless -r $device && -S $device;
+  my $socket = IO::Socket::UNIX->new(Peer => $device);
+  croak "Can't talk to EGD on $device. $!" unless $socket;
+  my($s, $buffer, $toread) = ('', '', $nbytes);
+  while ($toread > 0) {
+    my $this_request = ($toread > 255) ? 255 : $toread;
+    # Use the blocking interface.
+    $socket->syswrite( pack("CC", 0x02, $this_request), 2);
+    my $this_grant = $socket->sysread($buffer, $this_request);
+    croak "Error reading EDG data from $device: $!\n"
+          unless defined $this_grant && $this_grant == $this_request;
+    $s .= $buffer;
+    $toread -= length($buffer);
+  }
+  croak "Internal EGD read error: wanted $nbytes, read ", length($s), ""
+      unless $nbytes == length($s);  # assert
+  $s;
 }
 
 1;
@@ -301,34 +362,51 @@ The randomness sources used are, in order:
 
 =over 4
 
-=item 1. Win32 Crypto API.  This will use C<CryptGenRandom> on Windows 2000
-      and C<RtlGenRand> on Windows XP and newer.  According to MSDN, these
-      are well-seeded CSPRNGs (FIPS 186-2 or AES-CTR), so should
-      be non-blocking.
+=item Win32 Crypto API.
 
-=item 2. /dev/random.  The strong source of randomness on most UNIX-like
-      systems.  Cygwin uses this, though it maps to the Win32 API.  On almost
-      all systems this is a blocking source of randomness -- if it runs out of
-      estimated entropy, it will hang until more has come into the system.
-      If this is an issue, which it often is on embedded devices, running a
-      tool such as L<HAVEGED|http://www.issihosts.com/haveged/> or
-      L<EGD|http://egd.sourceforge.net/> will help immensely.
+This will use C<CryptGenRandom> on Windows 2000 and C<RtlGenRand> on
+Windows XP and newer.  According to MSDN, these are well-seeded CSPRNGs
+(FIPS 186-2 or AES-CTR), so will be non-blocking.
 
-=item 3. /dev/urandom.  A nonblocking source of randomness that we label as
-      weak, since it will continue providing output even if the entropy has
-      been exhausted.
+=item EGD / PRNGD.
 
-=item 4. L<Crypt::Random::TESHA2>, a module that generates random bytes from
-      an entropy pool fed with timer/scheduler variations.  Measurements and
-      tests are performed on installation to determine whether the source is
-      considered strong or weak.  This is entirely in portable userspace,
-      which is good for ease of use, but really requires user verification
-      that it is working as expected if we expect it to be strong.  The
-      concept is similar to L<Math::TrulyRandom> though updated to something
-      closer to what TrueRand 2.1 does vs. the obsolete version 1 that
-      L<Math::TrulyRandom> implements.  It is very slow and has wide speed
-      variability across platforms : I've seen numbers ranging from 40 to
-      150,000 bits per second.
+This looks for sockets that speak the L<EGD|http://egd.sourceforge.net/>
+protocol, including L<PRNGD|http://prngd.sourceforge.net/>.  These are
+userspace entropy daemons that are commonly used by OpenSSL, OpenSSH, and
+GnuGP.  The locations searched are C</var/run/egd-pool>, C</dev/egd-pool>,
+C</etc/egd-pool>, and C</etc/entropy>.  EGD is blocking, while PRNGD is
+non-blocking (like the Win32 API, it is really a seeded CSPRNG).  However
+there is no way to tell them apart, so we treat it as blocking.  If your
+O/S supports /dev/random, consider L<HAVEGED|http://www.issihosts.com/haveged/>
+as an alternative (a system daemon that refills /dev/random as needed).
+
+=item /dev/random.
+
+The strong source of randomness on most UNIX-like systems.  Cygwin uses
+this, though it maps to the Win32 API.  On almost all systems this is a
+blocking source of randomness -- if it runs out of estimated entropy, it
+will hang until more has come into the system.  If this is an issue,
+which it often is on embedded devices, running a tool such as
+L<HAVEGED|http://www.issihosts.com/haveged/> will help immensely.
+
+=item /dev/urandom.
+
+A nonblocking source of randomness that we label as weak, since it will
+continue providing output even if the actual entropy has been exhausted.
+
+=item TESHA2.
+
+L<Crypt::Random::TESHA2> is a Perl module that generates random bytes from
+an entropy pool fed with timer/scheduler variations.  Measurements and
+tests are performed on installation to determine whether the source is
+considered strong or weak.  This is entirely in portable userspace,
+which is good for ease of use, but really requires user verification
+that it is working as expected if we expect it to be strong.  The
+concept is similar to L<Math::TrulyRandom> though updated to something
+closer to what TrueRand 2.1 does vs. the obsolete version 1 that
+L<Math::TrulyRandom> implements.  It is very slow and has wide speed
+variability across platforms : I've seen numbers ranging from 40 to
+150,000 bits per second.
 
 =back
 
@@ -336,6 +414,95 @@ A source can also be supplied in the constructor.  Each of these sources will
 have its debatable points about perceived strength.  E.g. Why is /dev/urandom
 considered weak while Win32 is strong?  Can any userspace method such as
 TrueRand or TESHA2 be considered strong?
+
+
+=head2 SOURCE TABLE
+
+This table summarizes the default sources:
+
+  +------------------------------------------+
+  |     SOURCE    |  STRENGTH   |  BLOCKING  |
+  |---------------+-------------+------------|
+  | Win32         |   Strong(1) |     No     |
+  |---------------+-------------+------------|
+  | EGD / PRNGD   |   Strong    |    Yes(2)  |
+  |---------------+-------------+------------|
+  | /dev/random   |   Strong    |    Yes     |
+  |---------------+-------------+------------|
+  | /dev/urandom  |    Weak     |     No     |
+  |---------------+-------------+------------|
+  | TESHA2        |   Strong(3) |     No     |
+  +---------------+-------------+------------+
+
+  1) Both CryptGenRandom and RtlGenRandom are considered strong by this
+     package, even though both are seeded CSPRNGs so should be the equal of
+     /dev/urandom in this respect.  The CryptGenRandom function used in
+     Windows 2000 has issues so should be considered weaker.
+
+  2) EGD is blocking, PRNGD is not.  We cannot tell the two apart.  There are
+     other software products that use the same protocol.
+
+  3) TESHA2 is strong on most platforms, but it is possible its self-test
+     determined not enough entropy was available via timers, causing it to
+     run in weak mode.
+
+
+=head2 STRENGTH
+
+In theory, a strong generator will provide true entropy.  Even if a third
+party knew a previous result and the entire state of the generator at any
+time up to when their value was returned, they could still not effectively
+predict the result of the next returned value.  This implies the generator
+must either be blocking to wait for entropy (e.g. /dev/random) or go through
+some possibly time-consuming process to gather it (TESHA2, EGD, the HAVEGE
+daemon refilling /dev/random).  In practice, rarely do we get true entropy
+(hardware RNGs using quantum sources), so strong in this case means practically
+strong.
+
+Creating a satisfactory strength measurement is problematic.  The Win32
+Crypto API is considered "strong" by most customers and every other Perl
+module, however it is a well seeded CSPRNG according to the MSDN docs,
+so is not a strong source based on the definition in the previous paragraph.
+Similarly, almost all sources consider /dev/urandom to be weak, as once it
+runs out of entropy it returns a deterministic function based on its state
+(albeit one that cannot be run either direction from a returned result if the
+internal state is not known).
+
+
+=head2 BLOCKING
+
+EGD and /dev/random are blocking sources.  This means that if they run out of
+estimated entropy, they will pause until they've collected more.  This means
+your program also pauses.  On typical workstations this may be a few seconds
+or even minutes.  On an isolated network server this may cause a delay of
+hours or days.  EGD is proactive about gathering more entropy as fast as it
+can.  Running a tool such as the HAVEGE daemon or timer_entropyd can make
+/dev/random act like a non-blocking source, as the entropy daemon will wake
+up and refill the pool almost instantly.
+
+Win32, PRNGD, and /dev/urandom are fast nonblocking sources.  When they run
+out of entropy, they use a CSPRNG to keep supplying data at high speed.
+However this means that there is no additional entropy being supplied.
+
+TESHA2 is nonblocking, but can be very slow.  On a machine in human use, it
+may be as fast or faster to wait for /dev/random.  On an isolated server, we
+know TESHA2 will return bits at a relatively steady rate, while we cannot say
+the same of /dev/random.  Also note that the blocking sources such as EGD and
+/dev/random both try to maintain reasonably large entropy pools, so small
+requests can be supplied without blocking.
+
+
+=head2 IN PRACTICE
+
+Use the default to get the best source known.  If you know more about the
+sources available, you can use a whitelist, blacklist, or a custom source.
+In general, to get the best source (typically Win32 or /dev/random):
+
+  my $source = Crypt::Random::Seed->new();
+
+To get a good non-blocking source (Win32 or /dev/urandom):
+
+  my $source = Crypt::Random::Seed->new(Weak => 1, NonBlocking => 1);
 
 
 =head1 METHODS
