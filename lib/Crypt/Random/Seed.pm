@@ -4,6 +4,9 @@ use warnings;
 use Fcntl;
 use Carp qw/carp croak/;
 
+# cert insists on using constant, but regular critic doesn't like it.
+## no critic (constant)
+
 BEGIN {
   $Crypt::Random::Seed::AUTHORITY = 'cpan:DANAJ';
   $Crypt::Random::Seed::VERSION = '0.01';
@@ -12,7 +15,7 @@ BEGIN {
 use base qw( Exporter );
 our @EXPORT_OK = qw( );
 our %EXPORT_TAGS = (all => [ @EXPORT_OK ]);
-our @EXPORT = qw( );  # nothing by default
+# Export nothing by default
 
 use constant UINT32_SIZE => 4;
 
@@ -294,7 +297,7 @@ sub __read_egd {
   }
   croak "Internal EGD read error: wanted $nbytes, read ", length($s), ""
       unless $nbytes == length($s);  # assert
-  $s;
+  return $s;
 }
 
 1;

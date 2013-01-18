@@ -18,6 +18,7 @@ t/90-release-perlcritic.t
 t/91-release-pod-syntax.t
 t/92-release-pod-coverage.t
 t/93-release-kwalitee.t
+t/94-release-manifest.t
 examples/brs.pl
 .travis.yml
 META.yml                                 Module YAML meta-data (added by MakeMaker)

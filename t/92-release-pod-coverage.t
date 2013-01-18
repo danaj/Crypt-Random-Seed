@@ -1,19 +1,15 @@
 #!/usr/bin/perl
 use strict;
 use warnings;
+use Test::More;
 
-BEGIN {
-  unless ($ENV{RELEASE_TESTING}) {
-    require Test::More;
-    Test::More::plan(skip_all => 'these tests are for release candidate testing');
-  }
+unless ($ENV{RELEASE_TESTING}) {
+  plan(skip_all => 'these tests are for release candidate testing');
 }
 
 #---------------------------------------------------------------------
 
-
-use Test::More;
-eval "use Test::Pod::Coverage 1.08";
+eval 'use Test::Pod::Coverage 1.08';  ## no critic (eval)
 plan skip_all => "Test::Pod::Coverage 1.08 required for testing POD coverage"
   if $@;
 

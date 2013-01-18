@@ -6,6 +6,8 @@ Revision history for Perl extension Crypt::Random::Seed
 
   - More documentation.
 
+  - More strict with perlcritic (used Bytes::Random::Secure for some reference)
+
 
 0.01  12 Jan 2013
 

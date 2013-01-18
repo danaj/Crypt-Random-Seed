@@ -7,7 +7,7 @@ use Crypt::Random::Seed;
 
 use Test::More  tests => 9;
 
-my $source = new Crypt::Random::Seed(Weak=>1, NonBlocking=>1);
+my $source = Crypt::Random::Seed->new(Weak=>1, NonBlocking=>1);
 
 {
   my @vals = $source->random_values();
