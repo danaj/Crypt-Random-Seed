@@ -10,7 +10,7 @@ use Crypt::Random::Seed;
 
 use Test::More  tests => 2;
 
-my $source = Crypt::Random::Seed->new(Weak=>1, NonBlocking=>1);
+my $source = Crypt::Random::Seed->new(NonBlocking=>1);
 
 my $byte = $source->random_bytes(4);
 is( length($byte), 4, "random_bytes(4) returned 4 bytes" );

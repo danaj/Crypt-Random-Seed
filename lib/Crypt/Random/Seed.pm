@@ -9,7 +9,7 @@ use Carp qw/carp croak/;
 
 BEGIN {
   $Crypt::Random::Seed::AUTHORITY = 'cpan:DANAJ';
-  $Crypt::Random::Seed::VERSION = '0.01';
+  $Crypt::Random::Seed::VERSION = '0.02';
 }
 
 use base qw( Exporter );
@@ -19,20 +19,26 @@ our %EXPORT_TAGS = (all => [ @EXPORT_OK ]);
 
 use constant UINT32_SIZE => 4;
 
-# This is just used to keep track of the pre-defined names, so nobody can
-# define a user method with this name.
-my %defined_methods = (
-  'CryptGenRandom' => 1,
-  'RtlGenRand'     => 1,
-  '/dev/random'    => 1,
-  '/dev/urandom'   => 1,
-  'TESHA2'         => 1,
-  'EGD'            => 1,
+# These are the pre-defined names.  We don't let user methods use these.
+my %defined_methods = map { $_ => 1 }
+  (qw(CryptGenRandom RtlGenRand EGD /dev/random /dev/urandom
+      TESHA2-strong TESHA2-weak));
+# If given one of these names as whitelist/blacklist, we add these also.
+my %name_aliases = (
+  'Win32'  => [qw(RtlGenRand CryptGenRandom)],
+  'TESHA2' => [qw(TESHA2-strong TESHA2-weak)],
 );
 
 sub new {
   my ($class, %params) = @_;
   my $self = {};
+
+  # Trying to handle strong vs. weak is fraught with complication, so just
+  # remove the idea entirely.
+  if (defined $params{Weak}) {
+    # In this release, just silently don't use it.
+    delete $params{Weak};
+  }
 
   if (defined $params{Source}) {
     if (ref($params{Source}) eq 'CODE') {
@@ -51,6 +57,7 @@ sub new {
       croak "Invalid 'Source'.  Should be code or array reference.";
     }
   } else {
+    # This is a sorted list -- the first one that returns true gets used.
     my @methodlist = (
        \&_try_win32,
        \&_try_egd,
@@ -65,26 +72,24 @@ sub new {
       croak "Parameter 'Only' must be an array ref" unless ref($params{Only}) eq 'ARRAY';
       $have_whitelist = 1;
       $whitelist{$_} = 1 for @{$params{Only}};
-      if ($whitelist{'Win32'}) {
-        $whitelist{'CryptGenRandom'} = 1;
-        $whitelist{'RtlGenRand'} = 1;
+      while ( my($name, $list) = each %name_aliases) {
+        @whitelist{@$list} = (1) x scalar @$list if $whitelist{$name};
       }
     }
     my %blacklist;
     if (defined $params{Never}) {
       croak "Parameter 'Never' must be an array ref" unless ref($params{Never}) eq 'ARRAY';
       $blacklist{$_} = 1 for @{$params{Never}};
-      if ($blacklist{'Win32'}) {
-        $blacklist{'CryptGenRandom'} = 1;
-        $blacklist{'RtlGenRand'} = 1;
+      while ( my($name, $list) = each %name_aliases) {
+        @blacklist{@$list} = (1) x scalar @$list if $blacklist{$name};
       }
     }
 
     foreach my $m (@methodlist) {
       my ($name, $rsub, $isblocking, $isstrong) = $m->();
       next unless defined $name;
-      next if $params{NonBlocking} && $isblocking;
-      next if !$isstrong && !$params{Weak};
+      next if $isblocking && ($params{NonBlocking} || $params{Nonblocking} || $params{nonblocking});
+      #next if !$isstrong && !$params{Weak};
       next if $blacklist{$name};
       next if $have_whitelist && !$whitelist{$name};
       $self->{Name}      = $name;
@@ -140,7 +145,8 @@ sub _try_tesha2 {
   eval { require Crypt::Random::TESHA2; Crypt::Random::TESHA2->import(); 1; }
   or return;
   my $isstrong = Crypt::Random::TESHA2::is_strong();
-  return ('TESHA2', \&Crypt::Random::TESHA2::random_bytes, 0, 1);
+  my $name = join('-', 'TESHA2', ($isstrong) ? 'strong' : 'weak');
+  return ($name, \&Crypt::Random::TESHA2::random_bytes, 0, 1);
 }
 
 sub _try_dev_urandom {
@@ -315,7 +321,7 @@ Crypt::Random::Seed - Simple method to get strong randomness
 
 =head1 VERSION
 
-Version 0.01
+Version 0.02
 
 
 =head1 SYNOPSIS
@@ -326,9 +332,6 @@ Version 0.01
   die "No strong sources exist" unless defined $source;
   my $seed_string = $source->random_bytes(4);
   my @seed_values = $source->random_values(4);
-
-  # Allow weak sources, in case nothing strong is available
-  my $maybe_weak_source = Crypt::Random::Seed( Weak=>1 );
 
   # Only non-blocking sources
   my $nonblocking_source = Crypt::Random::Seed( NonBlocking=>1 );
@@ -357,13 +360,19 @@ Version 0.01
 
 A simple mechanism to get strong randomness.  The main purpose of this
 module is to provide a simple way to generate a seed for a PRNG such as
-L<Math::Random::ISAAC>, or for use in cryptographic key generation.  Flags
-for accepting weak sources or requiring nonblocking sources are given, as
-well as a very simple method for plugging in a source.
+L<Math::Random::ISAAC>, for use in cryptographic key generation, or as the
+seed for an upstream module such as L<Bytes::Random::Secure>.  Flags for
+requiring non-blocking sources are allowed, as well as a very simple
+method for plugging in a source.
 
 The randomness sources used are, in order:
 
 =over 4
+
+=item User supplied.
+
+If the constructor is called with a Source defined, then it is used.  It
+is not checked vs. other flags (NonBlocking, Never, Only).
 
 =item Win32 Crypto API.
 
@@ -423,31 +432,36 @@ TrueRand or TESHA2 be considered strong?
 
 This table summarizes the default sources:
 
-  +------------------------------------------+
-  |     SOURCE    |  STRENGTH   |  BLOCKING  |
-  |---------------+-------------+------------|
-  | Win32         |   Strong(1) |     No     |
-  |---------------+-------------+------------|
-  | EGD / PRNGD   |   Strong    |    Yes(2)  |
-  |---------------+-------------+------------|
-  | /dev/random   |   Strong    |    Yes     |
-  |---------------+-------------+------------|
-  | /dev/urandom  |    Weak     |     No     |
-  |---------------+-------------+------------|
-  | TESHA2        |   Strong(3) |     No     |
-  +---------------+-------------+------------+
+  +------------------+-------------+------------+--------------------+
+  |      SOURCE      |  STRENGTH   |  BLOCKING  |       NOTE         |
+  |------------------+-------------+------------+--------------------|
+  | RtlGenRandom     |   Strong(1) |     No     | Default WinXP+     |
+  |------------------+-------------+------------+--------------------|
+  | CryptGenRandom   |   Strong(1) |     No     | Default Win2000    |
+  |------------------+-------------+------------+--------------------|
+  | EGD / PRNGD      |   Strong    |    Yes(2)  |                    |
+  |------------------+-------------+------------+--------------------|
+  | /dev/random      |   Strong    |    Yes     | Typical UNIX       |
+  |------------------+-------------+------------+--------------------|
+  | /dev/urandom     |    Weak     |     No     | Typical UNIX NB    |
+  |------------------+-------------+------------+--------------------|
+  | TESHA2-strong    |   Strong    |     No     |                    |
+  |------------------+-------------+------------+--------------------|
+  | TESHA2-weak      |    Weak     |     No     |                    |
+  +------------------+-------------+------------+--------------------+
+
+The alias 'Win32' can be used in whitelist and blacklist and will match both
+the Win32 sources C<RtlGenRandom> and C<CryptGenRandom>.  The alias 'TESHA2'
+may be similarly used and matches both the weak and strong sources.
 
   1) Both CryptGenRandom and RtlGenRandom are considered strong by this
      package, even though both are seeded CSPRNGs so should be the equal of
      /dev/urandom in this respect.  The CryptGenRandom function used in
-     Windows 2000 has issues so should be considered weaker.
+     Windows 2000 has some known issues so should be considered weaker.
 
   2) EGD is blocking, PRNGD is not.  We cannot tell the two apart.  There are
-     other software products that use the same protocol.
-
-  3) TESHA2 is strong on most platforms, but it is possible its self-test
-     determined not enough entropy was available via timers, causing it to
-     run in weak mode.
+     other software products that use the same protocol.  EGD mixes in system
+     entropy on every request, while PRNGD mixes on a time schedule.
 
 
 =head2 STRENGTH
@@ -458,9 +472,10 @@ time up to when their value was returned, they could still not effectively
 predict the result of the next returned value.  This implies the generator
 must either be blocking to wait for entropy (e.g. /dev/random) or go through
 some possibly time-consuming process to gather it (TESHA2, EGD, the HAVEGE
-daemon refilling /dev/random).  In practice, rarely do we get true entropy
-(hardware RNGs using quantum sources), so strong in this case means practically
-strong.
+daemon refilling /dev/random).  Note: strong in this context means practically
+strong, as most computers don't have a true hardware entropy generator.  The
+goal is to make all the attackers ill-gotten knowledge give them no better
+solution than if they did not have the information.
 
 Creating a satisfactory strength measurement is problematic.  The Win32
 Crypto API is considered "strong" by most customers and every other Perl
@@ -470,6 +485,15 @@ Similarly, almost all sources consider /dev/urandom to be weak, as once it
 runs out of entropy it returns a deterministic function based on its state
 (albeit one that cannot be run either direction from a returned result if the
 internal state is not known).
+
+Because of this confusion, I have removed the C<Weak> configuration option
+that was present in version 0.01.  It will now be ignored.  You should be
+able to use a combination of whitelist, blacklist, and the source's
+C<is_strong> return value to decide if this meets your needs.  On Win32, you
+really only have a choice of Win32 and TESHA2.  The former is going to be
+what most people want, and can be chosen even with non-blocking set.  On most
+UNIX systems, C</dev/random> will be chosen for blocking and C</dev/urandom>
+for non-blocking, which is what should be done in most cases.
 
 
 =head2 BLOCKING
@@ -487,12 +511,11 @@ Win32, PRNGD, and /dev/urandom are fast nonblocking sources.  When they run
 out of entropy, they use a CSPRNG to keep supplying data at high speed.
 However this means that there is no additional entropy being supplied.
 
-TESHA2 is nonblocking, but can be very slow.  On a machine in human use, it
-may be as fast or faster to wait for /dev/random.  On an isolated server, we
-know TESHA2 will return bits at a relatively steady rate, while we cannot say
-the same of /dev/random.  Also note that the blocking sources such as EGD and
-/dev/random both try to maintain reasonably large entropy pools, so small
-requests can be supplied without blocking.
+TESHA2 is nonblocking, but can be very slow.  /dev/random can be faster if run
+on a machine with lots of activity.  On an isolated server, TESHA2 may be
+much faster.  Also note that the blocking sources such as EGD and /dev/random
+both try to maintain reasonably large entropy pools, so small requests can be
+supplied without blocking.
 
 
 =head2 IN PRACTICE
@@ -505,44 +528,38 @@ In general, to get the best source (typically Win32 or /dev/random):
 
 To get a good non-blocking source (Win32 or /dev/urandom):
 
-  my $source = Crypt::Random::Seed->new(Weak => 1, NonBlocking => 1);
+  my $source = Crypt::Random::Seed->new(NonBlocking => 1);
 
 
 =head1 METHODS
 
 =head2 new
 
-The constructor with no arguments will find the first strong source in its
-fixed list and return an object that performs the defined methods.  This
-will mean Win32, /dev/random, and TESHA2 (if it was considered strong on this
-platform).  If no strong sources could be found (quite unusual) then the
-returned value will be undef.
+The constructor with no arguments will find the first available source in its
+fixed list and return an object that performs the defined methods.  If no
+sources could be found (quite unusual) then the returned value will be undef.
 
 Optional parameters are passed in as a hash and may be mixed.
 
-=head3 Weak => I<boolean>
-
-Weak sources are also allowed.  This means /dev/urandom will be checked right
-after /dev/random, and TESHA2 will be allowed even if it was considered weak
-on this system.  If this option is specified, a source should always be
-available.  Note that strong sources are still preferred.
-
 =head3 NonBlocking => I<boolean>
 
-Only non-blocking sources will be allowed.  In practice this means /dev/random
-will not be chosen (except on FreeBSD where it is non-blocking).
+Only non-blocking sources will be allowed.  In practice this means EGD
+and /dev/random will not be chosen (except on FreeBSD where it is
+non-blocking).
 
 =head3 Only => [I<list of strings>]
 
 Takes an array reference containing one or more string source names.  No
 source whose name does not match one of these strings will be chosen.  The
-string 'Win32' will match either of the Win32 sources.
+string 'Win32' will match either of the Win32 sources, and 'TESHA2' will match
+both the strong and weak versions.
 
 =head3 Never => [I<list of strings>]
 
 Takes an array reference containing one or more string source names.  No
 source whose name matches one of these strings will be chosen.  The string
-'Win32' will match either of the Win32 sources.
+'Win32' will match either of the Win32 sources, and 'TESHA2' will match both
+the strong and weak versions.
 
 =head3 Source => sub { I<...> }
 
@@ -557,7 +574,6 @@ considered non-blocking and non-strong.
 Similar to the simpler source routine, but also allows the other source
 parameters to be defined.  The name may not be one of the standard names
 listed in the L</"name"> section.
-
 
 
 =head2 random_bytes($n)
@@ -578,16 +594,20 @@ Returns the text name of the random source.  This will be one of:
 C<User> for user defined,
 C<CryptGenRandom> for Windows 2000 Crypto API,
 C<RtlGenRand> for Windows XP and newer Crypto API,
+C<EGD> for a known socket speaking the EGD protocol,
 C</dev/random> for the UNIX-like strong randomness source,
 C</dev/urandom> for the UNIX-like non-blocking randomness source,
-C<TESHA2> for the userspace entropy method.  Other methods may be supported
-in the future.  User supplied sources may be named anything other than one
-of the defined names.
+C<TESHA2-strong> for the userspace entropy method when considered strong,
+C<TESHA2-weak> for the userspace entropy method when considered weak.
+Other methods may be supported in the future.  User supplied sources may be
+named anything other than one of the defined names.
 
 =head2 is_strong
 
-Returns 1 or 0 indicating whether the source is considered a strong
-source of randomness.
+Returns 1 or 0 indicating whether the source is considered a strong source
+of randomness.  See the L</"STRENGTH"> section for more discussion of what
+this means, and the L<source table|/"SOURCE TABLE"> for what we think of each
+source.
 
 =head2 is_blocking
 
@@ -630,7 +650,7 @@ A great little module that is almost what I was looking for.
 L<Crypt::Random::Seed> will act the same if given the constructor:
 
   my $source = Crypt::Random::Seed->new(
-     Weak => 1, NonBlocking => 1,
+     NonBlocking => 1,
      Only => [qw(/dev/random /dev/urandom Win32)]
   );
   croak "No randomness source available" unless defined $source;

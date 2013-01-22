@@ -3,11 +3,16 @@ use strict;
 use warnings;
 use Crypt::Random::Seed;
 
-use Test::More  tests => 2;
+use Test::More  tests => 4;
 
-my $source = Crypt::Random::Seed->new(Weak=>1);
+my $bsource = Crypt::Random::Seed->new();
+my $bname = $bsource->name();
+ok(defined($bname));
+ok($bname ne '');
 
-my $name = $source->name();
-diag "Method: $name";
-ok(defined($name));
-ok($name ne '');
+my $nbsource = Crypt::Random::Seed->new(NonBlocking=>1);
+my $nbname = $nbsource->name();
+ok(defined($nbname));
+ok($nbname ne '');
+
+diag "\nDefault     blocking method: $bname\nDefault non-blocking method: $nbname";

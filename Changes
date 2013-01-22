@@ -1,12 +1,17 @@
 Revision history for Perl extension Crypt::Random::Seed
 
-0.02  17 Jan 2013
+0.02  21 Jan 2013
 
   - Add EGD/PRNGD source.
 
   - More documentation.
 
   - More strict with perlcritic (used Bytes::Random::Secure for some reference)
+
+  - Remove 'Weak' constructor option.  There was too little logic behind what
+    got called strong or weak.  The is_strong() call is still left, so the
+    caller can use it possibly in conjunction with the name() value to make a
+    more informed decision.
 
 
 0.01  12 Jan 2013
