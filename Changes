@@ -2,7 +2,12 @@ Revision history for Perl extension Crypt::Random::Seed
 
 0.03  16 Feb 2013
 
-  - Allow tests to run even if TESHA2 isn't installed.
+  - Allow tests to run even if TESHA2 isn't installed.  Thanks to
+    Salvatore Bonaccorso for suggestion.
+
+  - Use binmode on file reads.  Thanks for David Dick for idea.
+
+  - Minor documentation updates.
 
 
 0.02  29 Jan 2013

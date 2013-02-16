@@ -9,7 +9,7 @@ use Carp qw/carp croak/;
 
 BEGIN {
   $Crypt::Random::Seed::AUTHORITY = 'cpan:DANAJ';
-  $Crypt::Random::Seed::VERSION = '0.02';
+  $Crypt::Random::Seed::VERSION = '0.03';
 }
 
 use base qw( Exporter );
@@ -166,6 +166,7 @@ sub __read_file {
   my ($file, $nbytes) = @_;
   return unless defined $nbytes && $nbytes > 0;
   sysopen(my $fh, $file, O_RDONLY);
+  binmode $fh;
   my($s, $buffer, $nread) = ('', '', 0);
   while ($nread < $nbytes) {
     my $thisread = sysread $fh, $buffer, $nbytes-$nread;
@@ -321,7 +322,7 @@ Crypt::Random::Seed - Simple method to get strong randomness
 
 =head1 VERSION
 
-Version 0.02
+Version 0.03
 
 
 =head1 SYNOPSIS
@@ -334,18 +335,19 @@ Version 0.02
   my @seed_values = $source->random_values(4);
 
   # Only non-blocking sources
-  my $nonblocking_source = Crypt::Random::Seed( NonBlocking=>1 );
+  my $nonblocking_source = Crypt::Random::Seed->new( NonBlocking=>1 );
 
   # Blacklist sources (never choose the listed sources)
-  my $nowin32_source = Crypt::Random::Seed( Never=>['Win32'] );
+  my $nowin32_source = Crypt::Random::Seed->new( Never=>['Win32'] );
 
   # Whitelist sources (only choose from these sources)
-  my $devr_source = Crypt::Random::Seed( Only=>['TESHA2'] );
+  my $devr_source = Crypt::Random::Seed->new( Only=>['TESHA2'] );
 
-  # Supply a custom source
-  my $user_source = Crypt::Random::Seed( Source=>sub { egd(shift) } );
+  # Supply a custom source.
+  my $user_src = Crypt::Random::Seed->new( Source=>sub { myfunc(shift) } );
   # Or supply a list of [name, sub, is_blocking, is_strong]
-  $user_source = Crypt::Random::Seed( Source=>['egd',sub {egd(shift)},0,1] );
+  $user_src = Crypt::Random::Seed->new(
+     Source=>['MyRandomFunction',sub {myfunc(shift)},0,1] );
 
   # Given a source there are a few things we can do:
   say "My randomness source is ", $source->name();
@@ -439,7 +441,7 @@ This table summarizes the default sources:
   |------------------+-------------+------------+--------------------|
   | CryptGenRandom   |   Strong(1) |     No     | Default Win2000    |
   |------------------+-------------+------------+--------------------|
-  | EGD / PRNGD      |   Strong    |    Yes(2)  |                    |
+  | EGD              |   Strong    |    Yes(2)  | also PRNGD, etc.   |
   |------------------+-------------+------------+--------------------|
   | /dev/random      |   Strong    |    Yes     | Typical UNIX       |
   |------------------+-------------+------------+--------------------|
@@ -460,8 +462,9 @@ may be similarly used and matches both the weak and strong sources.
      Windows 2000 has some known issues so should be considered weaker.
 
   2) EGD is blocking, PRNGD is not.  We cannot tell the two apart.  There are
-     other software products that use the same protocol.  EGD mixes in system
-     entropy on every request, while PRNGD mixes on a time schedule.
+     other software products that use the same protocol, and each will act
+     differently.  E.g. EGD mixes in system entropy on every request, while
+     PRNGD mixes on a time schedule.
 
 
 =head2 STRENGTH
