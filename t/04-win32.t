@@ -1,7 +1,6 @@
 #!/usr/bin/env perl
 use strict;
 use warnings;
-use Crypt::Random::TESHA2;
 
 BEGIN {
   if ($^O ne 'MSWin32') {

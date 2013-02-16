@@ -1,5 +1,10 @@
 Revision history for Perl extension Crypt::Random::Seed
 
+0.03  16 Feb 2013
+
+  - Allow tests to run even if TESHA2 isn't installed.
+
+
 0.02  29 Jan 2013
 
   - Add EGD/PRNGD source.
