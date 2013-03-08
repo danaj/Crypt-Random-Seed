@@ -48,6 +48,10 @@ sub new {
       $self->{Blocking} = 0;
       $self->{Strong} = 0;
     } elsif (ref($params{Source}) eq 'ARRAY') {
+      croak "User supplied array must be [name, sub, is_blocking, is_strong]"
+        unless scalar @{$params{Source}} == 4
+            && ref($params{Source}->[0]) eq ''
+            && ref($params{Source}->[1]) eq 'CODE';
       ($self->{Name}, $self->{SourceSub}, $self->{Blocking}, $self->{Strong})
       = @{$params{Source}};
       # For sanity, don't let them redefine the standard names.

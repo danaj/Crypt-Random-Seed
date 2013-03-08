@@ -1,5 +1,9 @@
 Revision history for Perl extension Crypt::Random::Seed
 
+0.04  ?
+
+  - Type check for user-supplied source array.
+
 0.03  16 Feb 2013
 
   - Allow tests to run even if TESHA2 isn't installed.  Thanks to
